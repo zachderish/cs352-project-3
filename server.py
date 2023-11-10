@@ -3,8 +3,17 @@ import socket, json, random, datetime, hashlib, sys
 def handle_get():
     return "in get"
 
-def handle_post(HTTPRequest):
-    return "in post"
+def handle_post(HTTPRequest, conn):
+    lines = HTTPRequest.split("\r\n")
+    username = lines[4]
+    password = lines[5]
+
+    print(username, password)
+    if username == "" or password == "":
+        conn.send("HTTP/1.0 501 Not Implemented\r\n".encode("ascii"))
+        print("LOGIN FAILED")
+
+    return
 
 def start_server(IP, PORT):
 
@@ -24,13 +33,12 @@ def start_server(IP, PORT):
             HTTPVersion = lineOne[2]
 
             if HTTPCommand == "POST" and RequestTarget == "/":
-                print(handle_post(HTTPRequest))
+                handle_post(HTTPRequest, conn)
             elif HTTPCommand == "GET":
                 print(handle_get())
             else:
                 #send “501 Not Implemented”
-                s.close()
-                exit()
+                s.send("HTTP/1.0 501 Not Implemented\r\n".encode("ascii"))
 
             s.close()
             exit()
