@@ -8,9 +8,8 @@ def handle_post(HTTPRequest, conn):
     username = lines[4]
     password = lines[5]
 
-    print(username, password)
     if username == "" or password == "":
-        conn.send("HTTP/1.0 501 Not Implemented\r\n".encode("ascii"))
+        conn.send("HTTP/1.0 501 Not Implemented\r\n".encode())
         print("LOGIN FAILED")
 
     return
@@ -24,7 +23,7 @@ def start_server(IP, PORT):
         while True:
             conn, addr = s.accept()
             HTTPRequest = conn.recv(1024).decode("ascii")
-            print(HTTPRequest)
+            #print(HTTPRequest)
 
             lineOne = HTTPRequest.split("\r\n")[0]
             lineOne = lineOne.split(" ")
@@ -38,7 +37,7 @@ def start_server(IP, PORT):
                 print(handle_get())
             else:
                 #send “501 Not Implemented”
-                s.send("HTTP/1.0 501 Not Implemented\r\n".encode("ascii"))
+                s.send("HTTP/1.0 501 Not Implemented\r\n".encode())
 
             s.close()
             exit()
