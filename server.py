@@ -3,7 +3,7 @@ import socket, json, random, datetime, hashlib, sys
 def handle_get():
     return "in get"
 
-def handle_post():
+def handle_post(HTTPRequest):
     return "in post"
 
 def start_server(IP, PORT):
@@ -24,7 +24,7 @@ def start_server(IP, PORT):
             HTTPVersion = lineOne[2]
 
             if HTTPCommand == "POST" and RequestTarget == "/":
-                print(handle_post())
+                print(handle_post(HTTPRequest))
             elif HTTPCommand == "GET":
                 print(handle_get())
             else:
