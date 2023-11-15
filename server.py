@@ -1,8 +1,55 @@
 import socket, json, random, datetime, hashlib, sys
 
-def handle_get():
-    return "in get"
+sessions = {}
 
+def handle_post(headers, conn):
+
+    if (not "username" in headers.keys()) or (not "password" in headers.keys()):
+        conn.send("HTTP/1.0 501 Not Implemented\r\n\r\n".encode())
+        print(logMessage() + " LOGIN FAILED")
+
+    username = headers["username"]
+    password = headers["password"]
+    if(isValid(username, password)):
+        sessionID = "sessionID=0x" + getRandom()
+        sessions[sessionID] = [getTime(), username]
+        message = f"HTTP/1.0 200 OK\r\nSet-Cookie: {sessionID}\r\n\r\nLogged in!"
+        conn.send(message.encode())
+        print(logMessage() + f" LOGIN SUCCESSFUL: {username} : {password}")
+
+    else:
+        print(logMessage() + f" LOGIN FAILED: {username} : {password}")
+        message = f"HTTP/1.0 200 OK\r\n\r\nLogin failed!"
+
+def handle_get(headers, conn, SESSION_TIMEOUT):
+    if not "Cookie" in headers.keys():
+        message = "HTTP/1.0 401 Unauthorized\r\n\r\n"
+        conn.send(message.encode())
+    
+    sessionID = headers["Cookie"].strip()
+    if sessionID in sessions.keys():
+        timestamp = sessions[sessionID][0]
+        username = sessions[sessionID][1]
+        currentTime = getTime()
+        if(validTime(timestamp, currentTime, SESSION_TIMEOUT)):
+            print("valid time")
+
+        timeLength = len(currentTime)
+        print("valid sessionID")
+
+# will correct this
+def validTime(timestamp, currentTime, SESSION_TIMEOUT):
+    timestamp = timestamp.split("-")
+    time1 = datetime.datetime(int(timestamp[0]), int(timestamp[1]), int(timestamp[2]), int(timestamp[3]), int(timestamp[4]), int(timestamp[5]))
+    currentTime = currentTime.split("-")
+    time2 = datetime.datetime(int(currentTime[0]), int(currentTime[1]), int(currentTime[2]), int(currentTime[3]), int(currentTime[4]), int(currentTime[5]))
+    diff = time2 - time1
+    if (int(diff.split(":")[2]) <= SESSION_TIMEOUT and diff.split(":")[0] == "0" and diff.split(":")[1] == "00"):
+        return True
+    else:
+        return False
+
+# check if username and password are valid
 def isValid(username, password):
     file = open("passwords.json")
     data = json.load(file)
@@ -14,7 +61,8 @@ def isValid(username, password):
         
     return False
 
-def logMessage():
+# get current time 
+def getTime():
     time = datetime.datetime.now()
     year = time.year
     month = time.month
@@ -22,33 +70,30 @@ def logMessage():
     hour = time.hour
     minute = time.minute
     second = time.second
+    return f"{year}-{month}-{day}-{hour}-{minute}-{second}"
 
-    return f"SERVER LOG: {year}-{month}-{day}-{hour}-{minute}-{second}"
+# return log message with time information
+def logMessage():
+    return f"SERVER LOG: {getTime()}"
 
+# Get random 64 bit hexadecimal number
 def getRandom():
     num = random.getrandbits(64)
     hex_num = format(num, '016x')
     return hex_num
 
-def handle_post(HTTPRequest, conn):
-    lines = HTTPRequest.split("\r\n")
-    
-    username = lines[4].replace("username: ", "")
-    password = lines[5].replace("password: ", "")
+def parseMessage(message):
+    lines = message.split("\r\n")
+    start_line = lines[0]
+    method,target,version = start_line.split(" ")
+    headers = {}
+    for header in lines[1:]:
+        if header == "": break #reached body
+        hkey,hval = header.split(": ",1)
+        headers[hkey] = hval
+    return method, target, version, headers
 
-    if username == "" or password == "":
-        conn.send("HTTP/1.0 501 Not Implemented\r\n\r\n".encode())
-        print(logMessage() + " LOGIN FAILED")
-
-    if(isValid(username, password)):
-        sessionID = "sessionID=0x" + getRandom()
-        message = f"HTTP/1.0 200 OK\r\nSet-Cookie: {sessionID}\r\n\r\nLogged in!"
-        conn.send(message.encode())
-        print(logMessage() + f" LOGIN SUCCESSFUL: {username} : {password}")
-
-    return
-
-def start_server(IP, PORT):
+def start_server(IP, PORT, SESSION_TIMEOUT):
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind((IP, PORT))
@@ -56,34 +101,26 @@ def start_server(IP, PORT):
         
         while True:
             conn, addr = s.accept()
-            HTTPRequest = conn.recv(1024).decode("ascii")
-
-            lineOne = HTTPRequest.split("\r\n")[0]
-            lineOne = lineOne.split(" ")
-            HTTPCommand = lineOne[0]
-            RequestTarget = lineOne[1]
-            HTTPVersion = lineOne[2]
-
-            if HTTPCommand == "POST" and RequestTarget == "/":
-                handle_post(HTTPRequest, conn)
-            elif HTTPCommand == "GET":
-                print(handle_get())
+            HTTPMessage = conn.recv(1024).decode("ascii")
+            method, target, version, headers = parseMessage(HTTPMessage)
+            
+            if method == "POST" and target == "/":
+                handle_post(headers, conn)
+            elif method == "GET":
+                handle_get(headers, conn, SESSION_TIMEOUT)
             else:
-                #send “501 Not Implemented”
                 s.send("HTTP/1.0 501 Not Implemented\r\n\r\n".encode())
 
             conn.close()
-            s.close()
-            exit()
 
 def main():
     IP = sys.argv[1]
     PORT = int(sys.argv[2].strip(""))
     ACCOUNTS_FILE = sys.argv[3]
-    SESSION_TIMEOUT = sys.argv[4]
+    SESSION_TIMEOUT = int(sys.argv[4])
     ROOT_DIRECTORY = sys.argv[5]
 
-    start_server(IP, PORT)
+    start_server(IP, PORT, SESSION_TIMEOUT)
 
 if __name__ == '__main__':
     main()
