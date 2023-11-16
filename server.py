@@ -83,12 +83,16 @@ def validTime(timestamp, currentTime, SESSION_TIMEOUT):
 
 # check if username and password are valid
 def isValid(username, password):
-    file = open("passwords.json")
+    file = open("accounts.json")
     data = json.load(file)
 
     for user in data:
-        pw = data[user]
-        if (username == user) and (password == pw):
+        salt = data[user][1]
+        hashstring = (password + salt).encode()
+        hashPassword = hashlib.sha256(hashstring).hexdigest()
+        
+        hashedPass = data[user][0]
+        if (username == user) and (hashPassword == hashedPass):
             return True
         
     return False
