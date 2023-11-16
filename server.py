@@ -3,10 +3,10 @@ import socket, json, random, datetime, hashlib, sys
 sessions = {}
 
 def handle_post(headers, conn):
-
     if (not "username" in headers.keys()) or (not "password" in headers.keys()):
         conn.send("HTTP/1.0 501 Not Implemented\r\n\r\n".encode())
         print(logMessage() + " LOGIN FAILED")
+        return
 
     username = headers["username"]
     password = headers["password"]
@@ -16,26 +16,58 @@ def handle_post(headers, conn):
         message = f"HTTP/1.0 200 OK\r\nSet-Cookie: {sessionID}\r\n\r\nLogged in!"
         conn.send(message.encode())
         print(logMessage() + f" LOGIN SUCCESSFUL: {username} : {password}")
+        return
 
     else:
         print(logMessage() + f" LOGIN FAILED: {username} : {password}")
         message = f"HTTP/1.0 200 OK\r\n\r\nLogin failed!"
 
-def handle_get(headers, conn, SESSION_TIMEOUT):
+def handle_get(headers, conn, SESSION_TIMEOUT, target, ROOT_DIRECTORY):
     if not "Cookie" in headers.keys():
         message = "HTTP/1.0 401 Unauthorized\r\n\r\n"
         conn.send(message.encode())
     
     sessionID = headers["Cookie"].strip()
     if sessionID in sessions.keys():
+
         timestamp = sessions[sessionID][0]
         username = sessions[sessionID][1]
         currentTime = getTime()
-        if(validTime(timestamp, currentTime, SESSION_TIMEOUT)):
-            print("valid time")
 
-        timeLength = len(currentTime)
-        print("valid sessionID")
+        if(validTime(timestamp, currentTime, SESSION_TIMEOUT)):
+
+            sessions[sessionID][0] = getTime()
+            path = f"{ROOT_DIRECTORY}/{username}/{target}"
+
+            if fileExists(path):
+
+                print(f"{logMessage()} GET SUCCEEDED: {username} : {target}")
+                body = readFile(path)
+                conn.send(f"HTTP/1.0 200 OK\r\n\r\n{body}".encode())
+
+            else:
+                print(f"{logMessage()} GET FAILED: {username} : {target}")
+                conn.send("HTTP/1.0 404 NOT FOUND\r\n\r\n".encode())
+        
+        else:
+            print(f"{logMessage()} SESSION EXPIRED: {username} : {target}")
+            conn.send("HTTP/1.0 401 Unauthorized\r\n\r\n".encode())
+    
+    else:
+        print(f"{logMessage()} COOKIE INVALID: {target}")
+        conn.send("HTTP/1.0 401 Unauthorized\r\n\r\n".encode())
+
+
+def readFile(path):
+    f = open(path, 'r')
+    return f.read()
+
+def fileExists(path):
+    try:
+        with open(path, 'r'):
+            return True
+    except FileNotFoundError:
+        return False
 
 # will correct this
 def validTime(timestamp, currentTime, SESSION_TIMEOUT):
@@ -44,7 +76,7 @@ def validTime(timestamp, currentTime, SESSION_TIMEOUT):
     currentTime = currentTime.split("-")
     time2 = datetime.datetime(int(currentTime[0]), int(currentTime[1]), int(currentTime[2]), int(currentTime[3]), int(currentTime[4]), int(currentTime[5]))
     diff = time2 - time1
-    if (int(diff.split(":")[2]) <= SESSION_TIMEOUT and diff.split(":")[0] == "0" and diff.split(":")[1] == "00"):
+    if (diff <= datetime.timedelta(seconds = SESSION_TIMEOUT)):
         return True
     else:
         return False
@@ -93,7 +125,7 @@ def parseMessage(message):
         headers[hkey] = hval
     return method, target, version, headers
 
-def start_server(IP, PORT, SESSION_TIMEOUT):
+def start_server(IP, PORT, SESSION_TIMEOUT, ROOT_DIRECTORY):
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind((IP, PORT))
@@ -107,7 +139,7 @@ def start_server(IP, PORT, SESSION_TIMEOUT):
             if method == "POST" and target == "/":
                 handle_post(headers, conn)
             elif method == "GET":
-                handle_get(headers, conn, SESSION_TIMEOUT)
+                handle_get(headers, conn, SESSION_TIMEOUT, target, ROOT_DIRECTORY)
             else:
                 s.send("HTTP/1.0 501 Not Implemented\r\n\r\n".encode())
 
@@ -120,7 +152,7 @@ def main():
     SESSION_TIMEOUT = int(sys.argv[4])
     ROOT_DIRECTORY = sys.argv[5]
 
-    start_server(IP, PORT, SESSION_TIMEOUT)
+    start_server(IP, PORT, SESSION_TIMEOUT, ROOT_DIRECTORY)
 
 if __name__ == '__main__':
     main()
